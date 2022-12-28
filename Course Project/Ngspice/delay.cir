@@ -1,0 +1,140 @@
+.include 22nm_MGK.pm
+.PARAM tr=10p  
+* tr -> transition time. 
+.global GND VDD
+.PARAM SOURCE_VOLTAGE = 1
+.PARAM x = 22n
+
+GND GND 0 dc = 0
+* GRD -> ground
+Vdd VDD GND dc='SOURCE_VOLTAGE'
+* Vdd source.
+
+.subckt NAND IN1 IN2 OUT1 Vdd GND
+    
+    Mp1 OUT1 IN1 VDD VDD pmos W = {2*x} L = {x}
+    Mp2 OUT1 IN2 VDD VDD pmos W = {2*x} L = {x}
+
+    Mn1 OUT1 IN2 xx GND nmos W = {2*x} L = {x}
+    Mn2 xx IN1 GND GND nmos W = {2*x} L = {x}
+    
+    Cl OUT1 GND 1f
+
+.ends NAND
+
+.subckt AND IN1 IN2 OUT1 VDD GND
+
+    XN1 IN1 IN2 X VDD GND NAND
+    XN2 X X OUT1 VDD GND NAND 
+
+.ends AND
+
+
+.subckt OR IN1 IN2 OUT1 VDD GND
+
+    XN1 IN1 IN1 X VDD GND NAND
+    XN2 IN2 IN2 Y VDD GND NAND 
+
+    XN3 X Y OUT1 VDD GND NAND
+.ends OR
+
+.subckt XOR IN1 IN2 OUT1 Vdd GND
+
+    XN1 IN1 IN2 O1 Vdd GND NAND
+    XN2 IN1 O1 O2 Vdd GND NAND
+    XN3 IN2 O1 O3 Vdd GND NAND
+    XN4 O2 O3 OUT1 Vdd GND NAND
+
+.ends XOR
+
+* HALF ADDER
+.subckt half_adder IN1 IN2 CARRY SUM Vdd GND
+
+    XN1 IN1 IN2 CARRY Vdd GND AND
+    XN2 IN1 IN2 SUM Vdd GND XOR
+
+.ends half_adder
+
+* FULL ADDER
+.subckt full_adder IN1 IN2 IN3 CARRY SUM Vdd GND
+
+    XN1 IN1 IN2 OUT1 VDD GND XOR
+    XN2 IN3 OUT1 SUM VDD GND XOR
+    XN3 IN3 OUT1 OUT2 VDD GND AND
+    XN4 IN1 IN2 OUT3 VDD GND AND
+    XN5 OUT2 OUT3 CARRY VDD GND OR
+
+.ends full_adder
+
+
+* MAIN CIRCUIT:
+
+* 1 ST LEVEL AND GATES
+XAND1 A3 B3 O1 VDD GND AND
+XAND2 A3 B2 O2 VDD GND AND
+XAND3 A2 B3 O3 VDD GND AND
+XAND4 A1 B3 O4 VDD GND AND
+XAND5 A3 B1 O5 VDD GND AND
+XAND6 A2 B2 O6 VDD GND AND
+XAND7 A2 B1 O7 VDD GND AND
+XAND8 A3 B0 O8 VDD GND AND
+XAND9 A0 B3 O9 VDD GND AND
+XAND10 A1 B2 O10 VDD GND AND
+XAND11 A1 B1 O11 VDD GND AND
+XAND12 A2 B0 O12 VDD GND AND
+XAND13 A0 B2 O13 VDD GND AND
+XAND14 A1 B0 O14 VDD GND AND
+XAND15 A0 B1 O15 VDD GND AND
+XAND16 A0 B0 P0 VDD GND AND
+
+
+* CREATING SECOND LEVEL.
+
+* half_adder IN1 IN2 CARRY SUM Vdd GND
+XN1 O14 O15 C1 P1 VDD GND half_adder
+XN2 O12 O11 C2 S1 VDD GND half_adder
+XN3 O7 O8 C3 S2 VDD GND half_adder
+
+* CREATING 3RD LEVEL.
+
+* full_adder IN1 IN2 IN3 CARRY SUM Vdd GND
+XN4 S1 C1 O13 C4 P2 VDD GND full_adder
+XN5 S2 C2 O10 C5 S3 VDD GND full_adder
+XN6 C3 O6 O5 C6 S4 VDD GND full_adder
+
+* CREATING 4TH LEVEL.
+XN7 C4 S3 O9 C7 P3 VDD GND full_adder
+XN8 C5 S4 O4 C8 S5 VDD GND full_adder
+XN9 O2 O3 C6 C9 S6 VDD GND full_adder
+
+* CREATING 5TH LEVEL.
+XN10 S5 C7 C10 P4 VDD GND half_adder
+
+* CREATING 6TH LEVEL.
+XN11 C8 C10 S6 C11 P5 VDD GND full_adder
+
+* CREATING 7TH LEVEL.
+XN12 C11 C9 O1 CC5 P6 VDD GND full_adder 
+
+
+VinA3 A3 GND PWL (0 0 {100p} 0 {100p+tr} 1)
+VinA2 A2 GND PWL (0 0 {100p} 0 {100p+tr} 1)
+VinA1 A1 GND PWL (0 0 {100p} 0 {100p+tr} 0)
+VinA0 A0 GND PWL (0 0 {100p} 0 {100p+tr} 0)
+VinB3 B3 GND PWL (0 0 {100p} 0 {100p+tr} 0)
+VinB2 B2 GND PWL (0 0 {100p} 0 {100p+tr} 0)
+VinB1 B1 GND PWL (0 0 {100p} 0 {100p+tr} 0)
+VinB0 B0 GND PWL (0 0 {100p} 0 {100p+tr} 1)
+
+
+.TRAN 0.1p {1000p}
+
+.control
+run
+    meas tran DELAY trig v(A0) val=0.5 rise=1 targ v(P4) val=0.5 rise=1
+
+    * echo "Wn2: $&width   ", "Delay: $&delay    " >>q4_a_output2.txt
+    echo "(1,1,0,0,0,0,0,1)             $&DELAY" >> delay.txt
+.endc
+.END
+
